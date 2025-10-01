@@ -1,7 +1,9 @@
 require("dotenv").config();
+const authenticateToken = require("./middleware/authMiddleware");
 const express = require("express");
 const pool = require("./db");
 const authRoutes = require("./routes/auth");
+const payments = require("./routes/payments"); // ✅ import payments router
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +13,7 @@ app.use(express.json());
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/payments", payments); // ✅ mount payments router
 
 // Default route
 app.get("/", (req, res) => {
@@ -18,16 +21,7 @@ app.get("/", (req, res) => {
 });
 
 // Video routes
-app.get("/api/videos", async (req, res) => {
-  try {
-    const [rows] = await pool.query("SELECT * FROM videos");
-    res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: "Database error" });
-  }
-});
-
-app.post("/api/videos", async (req, res) => {
+app.post("/api/videos", authenticateToken, async (req, res, next) => {
   const { title, url } = req.body;
 
   if (!title || !url) {
@@ -42,15 +36,18 @@ app.post("/api/videos", async (req, res) => {
 
     res.status(201).json({ id: result.insertId, title, url });
   } catch (error) {
-    res.status(500).json({ error: "Database error" });
+    next(error);
   }
 });
 
-app.delete("/api/videos/:id", async (req, res) => {
+// Delete a video
+app.delete("/api/videos/:id", authenticateToken, async (req, res, next) => {
   const videoID = parseInt(req.params.id);
 
   try {
-    const [result] = await pool.query("DELETE FROM videos WHERE id = ?", [videoID]);
+    const [result] = await pool.query("DELETE FROM videos WHERE id = ?", [
+      videoID,
+    ]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: "Video not found!" });
@@ -58,7 +55,17 @@ app.delete("/api/videos/:id", async (req, res) => {
 
     res.json({ message: `Video with id ${videoID} has been deleted!` });
   } catch (error) {
-    res.status(500).json({ error: "Database error" });
+    next(error);
+  }
+});
+
+// Get all videos
+app.get("/api/videos", authenticateToken, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM videos");
+    res.json(rows);
+  } catch (error) {
+    next(error);
   }
 });
 
