@@ -50,4 +50,24 @@ router.get("/", authenticateToken, async (req, res, next) => {
   }
 });
 
+// 📌 Get all videos a user has unlocked
+router.get("/unlocked/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const [rows] = await db.query(
+      `SELECT v.* 
+       FROM videos v
+       INNER JOIN user_video_access uva ON v.id = uva.videoId
+       WHERE uva.userId = ?`,
+      [userId]
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("❌ Fetch unlocked videos error:", error);
+    res.status(500).json({ error: "Failed to fetch unlocked videos" });
+  }
+});
+
 module.exports = router;
