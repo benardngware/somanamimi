@@ -2,7 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
-const db = require("../config/db");
+const pool = require("../db");
 
 const consumerKey = process.env.MPESA_CONSUMER_KEY;
 const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
@@ -16,13 +16,20 @@ const DARAJA_URL =
     : "https://sandbox.safaricom.co.ke";
 
 async function generateToken() {
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
+  const auth = Buffer.from(
+    process.env.MPESA_CONSUMER_KEY + ":" + process.env.MPESA_CONSUMER_SECRET
+  ).toString("base64");
+
   const { data } = await axios.get(
-    `${DARAJA_URL}/oauth/v1/generate?grant_type=client_credentials`,
-    { headers: { Authorization: `Basic ${auth}` } }
+    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    {
+      headers: { Authorization: `Basic ${auth}` },
+    }
   );
+
   return data.access_token;
 }
+
 
 //  STK Push (includes videoId & userId)
 router.post("/stkpush", async (req, res) => {
@@ -57,7 +64,7 @@ router.post("/stkpush", async (req, res) => {
     );
 
     // Store temporary request info → so we can match in callback
-    await db.query(
+    await pool.query(
       "INSERT INTO payments (userId, videoId, MerchantRequestID, CheckoutRequestID, ResultCode, ResultDesc, Amount, PhoneNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [userId, videoId, data.MerchantRequestID, data.CheckoutRequestID, -1, "PENDING", amount, phone]
     );
@@ -93,8 +100,10 @@ router.post("/callback", async (req, res) => {
       const TransactionDate = items.find(i => i.Name === "TransactionDate")?.Value || null;
       const PhoneNumber = items.find(i => i.Name === "PhoneNumber")?.Value || null;
 
+
+
       // ✅ Update payment record
-      await db.query(
+      await pool.query(
         `UPDATE payments 
          SET ResultCode=?, ResultDesc=?, Amount=?, MpesaReceiptNumber=?, TransactionDate=?, PhoneNumber=? 
          WHERE MerchantRequestID=? AND CheckoutRequestID=?`,
@@ -102,13 +111,13 @@ router.post("/callback", async (req, res) => {
       );
 
       // ✅ Unlock the video
-      const [payment] = await db.query(
+      const [payment] = await pool.query(
         "SELECT userId, videoId FROM payments WHERE MerchantRequestID=?",
         [MerchantRequestID]
       );
       if (payment.length) {
         const { userId, videoId } = payment[0];
-        await db.query(
+        await pool.query(
           "INSERT IGNORE INTO user_video_access (userId, videoId) VALUES (?, ?)",
           [userId, videoId]
         );
@@ -116,7 +125,7 @@ router.post("/callback", async (req, res) => {
       }
     } else {
       // Update as failed
-      await db.query(
+      await pool.query(
         `UPDATE payments SET ResultCode=?, ResultDesc=? 
          WHERE MerchantRequestID=? AND CheckoutRequestID=?`,
         [ResultCode, ResultDesc, MerchantRequestID, CheckoutRequestID]
@@ -128,5 +137,7 @@ router.post("/callback", async (req, res) => {
 
   res.status(200).json({ message: "Callback processed" });
 });
+
+
 
 module.exports = router;

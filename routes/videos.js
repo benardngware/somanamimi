@@ -55,7 +55,7 @@ router.get("/unlocked/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const [rows] = await db.query(
+    const [rows] = await pool.query(
       `SELECT v.* 
        FROM videos v
        INNER JOIN user_video_access uva ON v.id = uva.videoId
