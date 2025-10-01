@@ -6,7 +6,7 @@ logs
 *.log
 
 # Environment files (secrets)
-.env
+
 
 # OS-specific files
 .DS_Store
